@@ -7,7 +7,7 @@ import (
         "encoding/json"
         "time"
         "sync"
-//        "github.com/likexian/simplejson"
+        "gopkg.in/redis.v2"
         )
 
 type logentry struct {
@@ -32,17 +32,27 @@ func GetChannel() chan logentry {
     return newchan
 }
 
-func MonitorLog(logfile string, pattern string){
+func GetJSONChannel() chan string {
+    newchan := make(chan string)
+    return newchan
+}
+
+func MonitorLog(logfile string, pattern string, jsonchan chan string){
     logchan := GetChannel()
     var wg sync.WaitGroup
     wg.Add(2)
     go taillog(logfile, logchan, &wg)
-    go parseLogLine(logchan, pattern, &wg)
+    go parseLogLine(logchan, jsonchan, pattern, &wg)
     wg.Wait()
 }
 
 func main() {
-    MonitorLog("/tmp/test.txt","%{WORD}")
+    jsonchan := GetJSONChannel()
+    var wg sync.WaitGroup
+    wg.Add(1)
+    go MonitorLog("/tmp/test.txt","%{WORD}",jsonchan)
+    go sendToRedis("lnx-logstash:6900", jsonchan, &wg)
+    wg.Wait()
 }
 
 func taillog(file string, c chan logentry, wg *sync.WaitGroup){
@@ -74,7 +84,7 @@ func convertToJSON(jsondata FullLogEntry) string {
     return string(j)
 }
 
-func parseLogLine(c chan logentry, pattern string, wg *sync.WaitGroup) {
+func parseLogLine(c chan logentry, jc chan string, pattern string, wg *sync.WaitGroup) {
     g := grok.New()
     g.AddPatternsFromFile("/tmp/base")
     err := g.Compile(pattern)
@@ -88,7 +98,24 @@ func parseLogLine(c chan logentry, pattern string, wg *sync.WaitGroup) {
         logdata.timestamp = logline.logtime
         logdata.fields= g.Match(logline.logtext).Captures()
         jsoncapture := convertToJSON(logdata)
+        jc <- jsoncapture
         fmt.Println("parseLogLine_jsoncapture: ",jsoncapture)
+    }
+    wg.Done()
+}
+
+func sendToRedis(server string ,c chan string, wg *sync.WaitGroup){
+    client := redis.NewTCPClient(&redis.Options {
+        Addr:   "lnx-logstash:6900",
+        Password: "",
+        DB: 0,
+    })
+    for {
+        d := <-c
+        fmt.Println("Sending data to redis: ",d)
+        if err := client.Append("grogger", d).Err(); err != nil{
+            fmt.Println("RedisError: ",err)
+        }
     }
     wg.Done()
 }
