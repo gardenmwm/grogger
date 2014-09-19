@@ -2,6 +2,7 @@ package main
 
 import (
         "fmt"
+        "flag"
         "github.com/blakesmith/go-grok"
         "github.com/ActiveState/tail"
         "encoding/json"
@@ -10,6 +11,10 @@ import (
         "gopkg.in/redis.v2"
         "code.google.com/p/gcfg"
         )
+
+var server = flag.String("server", "lnx-logstash:6900", "Server:Port for Redis Server")
+var conffile = flag.String("config", "./grogger.ini", "Path to Config file")
+
 
 type logentry struct {
     logtext string
@@ -48,6 +53,7 @@ func MonitorLog(logfile string, pattern string, jsonchan chan string){
 }
 
 func main() {
+    flag.Parse()
     cfg := getfiles()
     jsonchan := GetJSONChannel()
     var wg sync.WaitGroup
@@ -118,7 +124,7 @@ func parseLogLine(c chan logentry, jc chan string, pattern string, wg *sync.Wait
 
 func sendToRedis(server string ,c chan string, wg *sync.WaitGroup){
     client := redis.NewTCPClient(&redis.Options {
-        Addr:   "lnx-logstash:6900",
+        Addr:   server,
         Password: "",
         DB: 0,
     })
@@ -141,11 +147,10 @@ type Config struct {
 
 func getfiles() Config {
     cfg := Config{}
-    err := gcfg.ReadFileInto(&cfg, "grogger.ini")
+    err := gcfg.ReadFileInto(&cfg, *conffile)
     if err != nil {
         fmt.Println("Config Error: ",err)
     }
-    fmt.Println(cfg.File["wso2test"])
 
     return cfg
 }
