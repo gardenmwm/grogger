@@ -10,11 +10,11 @@ import (
         "sync"
         "gopkg.in/redis.v2"
         "code.google.com/p/gcfg"
+        "os"
         )
 
 var server = flag.String("server", "lnx-logstash:6900", "Server:Port for Redis Server")
 var conffile = flag.String("config", "./grogger.ini", "Path to Config file")
-
 
 type logentry struct {
     logtext string
@@ -102,6 +102,10 @@ func convertToJSON(jsondata FullLogEntry) string {
 }
 
 func parseLogLine(c chan logentry, jc chan string, pattern string, wg *sync.WaitGroup) {
+    hostname, herr := os.Hostname()
+    if herr != nil {
+        fmt.Println("Getting hostname failed, wtf")
+        }
     g := grok.New()
     g.AddPatternsFromFile("/tmp/base")
     err := g.Compile(pattern)
@@ -111,7 +115,7 @@ func parseLogLine(c chan logentry, jc chan string, pattern string, wg *sync.Wait
     for {
         logline := <-c
         logdata := FullLogEntry{}
-        logdata.hostname = "test"
+        logdata.hostname = hostname
         logdata.timestamp = logline.logtime
         logdata.fields= g.Match(logline.logtext).Captures()
         fmt.Println("parseLogLine_G.Matches: ", logdata.fields)
