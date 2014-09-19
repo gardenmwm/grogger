@@ -8,6 +8,7 @@ import (
         "time"
         "sync"
         "gopkg.in/redis.v2"
+        "code.google.com/p/gcfg"
         )
 
 type logentry struct {
@@ -47,18 +48,28 @@ func MonitorLog(logfile string, pattern string, jsonchan chan string){
 }
 
 func main() {
+    cfg := getfiles()
     jsonchan := GetJSONChannel()
     var wg sync.WaitGroup
-    wg.Add(1)
-    go MonitorLog("/tmp/test.txt","%{WORD}",jsonchan)
+    for k,v := range cfg.File {
+        fmt.Println(k,v.Path,v.Pattern)
+        wg.Add(1)
+        go MonitorLog(v.Path,v.Pattern,jsonchan)
+    }
     go sendToRedis("lnx-logstash:6900", jsonchan, &wg)
     wg.Wait()
 }
 
 func taillog(file string, c chan logentry, wg *sync.WaitGroup){
+    endfile := tail.SeekInfo{
+        Offset: 0,
+        Whence: 2,
+        }
     t, err := tail.TailFile(file, tail.Config{
         Follow: true,
-        ReOpen: true})
+        ReOpen: true,
+        Location: &endfile,
+        })
         for line := range t.Lines {
             logline := logentry{}
             logline.logtext  = line.Text
@@ -97,6 +108,7 @@ func parseLogLine(c chan logentry, jc chan string, pattern string, wg *sync.Wait
         logdata.hostname = "test"
         logdata.timestamp = logline.logtime
         logdata.fields= g.Match(logline.logtext).Captures()
+        fmt.Println("parseLogLine_G.Matches: ", logdata.fields)
         jsoncapture := convertToJSON(logdata)
         jc <- jsoncapture
         fmt.Println("parseLogLine_jsoncapture: ",jsoncapture)
@@ -119,3 +131,22 @@ func sendToRedis(server string ,c chan string, wg *sync.WaitGroup){
     }
     wg.Done()
 }
+
+type Config struct {
+        File map[string]*struct {
+            Path string
+            Pattern string
+        }
+    }
+
+func getfiles() Config {
+    cfg := Config{}
+    err := gcfg.ReadFileInto(&cfg, "grogger.ini")
+    if err != nil {
+        fmt.Println("Config Error: ",err)
+    }
+    fmt.Println(cfg.File["wso2test"])
+
+    return cfg
+}
+
