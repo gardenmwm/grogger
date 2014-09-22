@@ -1,0 +1,40 @@
+#!/bin/bash
+#
+# /etc/rc.d/init.d/grogger
+#
+# Grogger is a tool to parse logs with grok and ship them to redis for logstash to access
+#
+# <tags -- see below for tag definitions. *Every line* from the top
+# of the file to the end of the tags section must begin with a #
+# character. After the tags section, there should be a blank line.
+# This keeps normal comments in the rest of the file from being
+# mistaken for tags, should they happen to fit the pattern.>
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+GROGGER=/usr/bin/grogger
+GROGGER_PATTERNS=/etc/grogger/patterns
+GROGGER_CONF=/etc/grogger/grogger.ini
+GOGGER_REDIS=lnx-logstash:6900
+
+case "$1" in
+    start)
+        echo -n "Starting grogger services: "
+        daemon --user=root --pidfile=/var/run/grogger.pid "$GROGGER --server=$GROGGER_REDIS --config=$GROGGER_CONF --patternfile=$GROGGER_PATTERNS"&
+        touch /var/lock/subsys/grogger
+    ;;
+    stop)
+        echo -n "Shutting down grpgger services: "
+        killproc grogger
+        rm -f /var/lock/subsys/grpgger
+    ;;
+    restart)
+        $0 stop
+        $0 start
+    ;;
+    *)
+        echo "Usage: <servicename> {start|stop|restart}"
+        exit 1
+    ;;
+esac
