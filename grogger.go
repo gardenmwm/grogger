@@ -61,7 +61,7 @@ func main() {
     jsonchan := GetJSONChannel()
     var wg sync.WaitGroup
     for k,v := range cfg.File {
-        fmt.Println(k,v.Path,v.Pattern)
+        fmt.Println("Added: ",k,v.Path,v.Pattern)
         wg.Add(1)
         go MonitorLog(v.Path,v.Pattern,jsonchan)
     }
@@ -127,13 +127,25 @@ func parseLogLine(c chan logentry, jc chan string, pattern string, wg *sync.Wait
         logdata := FullLogEntry{}
         logdata.hostname = hostname
         logdata.timestamp = logline.logtime
-        logdata.fields= g.Match(logline.logtext).Captures()
-        fmt.Println("parseLogLine_G.Matches: ", logdata.fields)
-        jsoncapture := convertToJSON(logdata)
-        jc <- jsoncapture
-        fmt.Println("parseLogLine_jsoncapture: ",jsoncapture)
+        logdata.fields = grokline(*g,logline.logtext)
+        if len(logdata.fields) > 0 {
+            jsoncapture := convertToJSON(logdata)
+            jc <- jsoncapture
+            fmt.Println("parseLogLine_jsoncapture: ",jsoncapture)
+        }
     }
     wg.Done()
+}
+
+func grokline(g grok.Grok, line string) map[string][]string {
+    defer func() {
+        if e:= recover(); e!= nil {
+            fmt.Println("Error in Groking, pattern probably has no matches",e)
+        }
+    }()
+    match := g.Match(line)
+    fields := match.Captures()
+    return fields
 }
 
 func sendToRedis(server string ,c chan string, wg *sync.WaitGroup){
@@ -144,7 +156,6 @@ func sendToRedis(server string ,c chan string, wg *sync.WaitGroup){
     })
     for {
         d := <-c
-        fmt.Println("Sending data to redis: ",d)
         if err := client.Append("grogger", d).Err(); err != nil{
             fmt.Println("RedisError: ",err)
         }
