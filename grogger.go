@@ -11,10 +11,13 @@ import (
         "gopkg.in/redis.v2"
         "code.google.com/p/gcfg"
         "os"
+        "strings"
+        //"reflect"
         )
 
 var server = flag.String("server", "lnx-logstash:6900", "Server:Port for Redis Server")
 var conffile = flag.String("config", "./grogger.ini", "Path to Config file")
+var patternfile = flag.String("patternfile", "/tmp/base", "Path to Paterns file")
 
 type logentry struct {
     logtext string
@@ -89,10 +92,17 @@ func taillog(file string, c chan logentry, wg *sync.WaitGroup){
 }
 
 func convertToJSON(jsondata FullLogEntry) string {
+    //Get rid of everything before : in field list since that has the grok pattern name
+    newjson := make(map[string][]string)
+    for k,v := range(jsondata.fields) {
+        keysplit := strings.Split(k,":")
+        newkey := keysplit[len(keysplit)-1]
+        newjson[newkey]= v
+    }
     l := JSONLogEntry {
         Host: jsondata.hostname,
         Timestamp: jsondata.timestamp,
-        Fields: jsondata.fields,
+        Fields: newjson,
         }
     j,err := json.Marshal(l)
     if err != nil {
@@ -107,7 +117,7 @@ func parseLogLine(c chan logentry, jc chan string, pattern string, wg *sync.Wait
         fmt.Println("Getting hostname failed, wtf")
         }
     g := grok.New()
-    g.AddPatternsFromFile("/tmp/base")
+    g.AddPatternsFromFile(*patternfile)
     err := g.Compile(pattern)
     if err != nil {
         fmt.Println("Error Compiling: ",err)
