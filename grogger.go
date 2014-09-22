@@ -82,7 +82,7 @@ func taillog(file string, c chan logentry, wg *sync.WaitGroup){
         for line := range t.Lines {
             logline := logentry{}
             logline.logtext  = line.Text
-            logline.logtime = time.Now().Format(time.RFC850)
+            logline.logtime = time.Now().Format(time.RFC822Z)
             c <- logline
         }
     if err != nil {
@@ -99,12 +99,11 @@ func convertToJSON(jsondata FullLogEntry) string {
         newkey := keysplit[len(keysplit)-1]
         newjson[newkey]= v
     }
-    l := JSONLogEntry {
-        Host: jsondata.hostname,
-        Timestamp: jsondata.timestamp,
-        Fields: newjson,
-        }
-    j,err := json.Marshal(l)
+    //Convert to a single map, this ugly because of a late design change
+    newjson["logsource"] = []string{jsondata.hostname}
+    newjson["groggertime"] = []string{jsondata.timestamp}
+    //Convert to JSON
+    j,err := json.Marshal(newjson)
     if err != nil {
         fmt.Println("test")
         }
@@ -156,7 +155,7 @@ func sendToRedis(server string ,c chan string, wg *sync.WaitGroup){
     })
     for {
         d := <-c
-        if err := client.Append("grogger", d).Err(); err != nil{
+        if err := client.RPush("grogger", d).Err(); err != nil{
             fmt.Println("RedisError: ",err)
         }
     }
