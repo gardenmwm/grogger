@@ -17,6 +17,7 @@ import (
 
 var server = flag.String("server", "lnx-logstash:6900", "Server:Port for Redis Server")
 var conffile = flag.String("config", "./grogger.ini", "Path to Config file")
+var confdir = flag.Bool("confidir", false, "ConfigPath is Directory")
 var patternfile = flag.String("patternfile", "/tmp/base", "Path to Paterns file")
 
 type logentry struct {
@@ -171,11 +172,12 @@ type Config struct {
 
 func getfiles() Config {
     cfg := Config{}
-    err := gcfg.ReadFileInto(&cfg, *conffile)
-    if err != nil {
-        fmt.Println("Config Error: ",err)
+    if *confdir == false {
+        err := gcfg.ReadFileInto(&cfg, *conffile)
+        if err != nil {
+            fmt.Println("Config Error: ",err)
+        }
     }
-
     return cfg
 }
 
