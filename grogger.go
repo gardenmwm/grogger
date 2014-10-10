@@ -104,6 +104,7 @@ func convertToJSON(jsondata FullLogEntry) string {
     //Convert to a single map, this ugly because of a late design change
     newjson["logsource"] = []string{jsondata.hostname}
     newjson["groggertime"] = []string{jsondata.timestamp}
+    newjson["logname"] = []string{jsondata.logname}
     //Convert to JSON
     j,err := json.Marshal(newjson)
     if err != nil {
