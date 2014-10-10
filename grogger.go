@@ -34,6 +34,7 @@ type JSONLogEntry struct {
 type FullLogEntry struct {
     hostname string
     timestamp string
+    logname string
     fields map[string][]string
 }
 
@@ -47,12 +48,12 @@ func GetJSONChannel() chan string {
     return newchan
 }
 
-func MonitorLog(logfile string, pattern string, jsonchan chan string){
+func MonitorLog(logfile string, pattern string, jsonchan chan string,logname string){
     logchan := GetChannel()
     var wg sync.WaitGroup
     wg.Add(2)
     go taillog(logfile, logchan, &wg)
-    go parseLogLine(logchan, jsonchan, pattern, &wg)
+    go parseLogLine(logchan, jsonchan, pattern, &wg,logname)
     wg.Wait()
 }
 
@@ -64,7 +65,7 @@ func main() {
     for k,v := range cfg.File {
         fmt.Println("Added: ",k,v.Path,v.Pattern)
         wg.Add(1)
-        go MonitorLog(v.Path,v.Pattern,jsonchan)
+        go MonitorLog(v.Path,v.Pattern,jsonchan,k)
     }
     go sendToRedis("lnx-logstash:6900", jsonchan, &wg)
     wg.Wait()
@@ -111,7 +112,7 @@ func convertToJSON(jsondata FullLogEntry) string {
     return string(j)
 }
 
-func parseLogLine(c chan logentry, jc chan string, pattern string, wg *sync.WaitGroup) {
+func parseLogLine(c chan logentry, jc chan string, pattern string, wg *sync.WaitGroup, logname string) {
     hostname, herr := os.Hostname()
     if herr != nil {
         fmt.Println("Getting hostname failed, wtf")
@@ -127,6 +128,7 @@ func parseLogLine(c chan logentry, jc chan string, pattern string, wg *sync.Wait
         logdata := FullLogEntry{}
         logdata.hostname = hostname
         logdata.timestamp = logline.logtime
+        logdata.logname = logname
         logdata.fields = grokline(*g,logline.logtext)
         if len(logdata.fields) > 0 {
             jsoncapture := convertToJSON(logdata)
